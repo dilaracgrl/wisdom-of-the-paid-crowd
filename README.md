@@ -91,6 +91,7 @@ src/
   kalshi.py         # settled markets + candlestick price history
   fetch_markets.py  # CLI -> one normalized markets table
   snapshot.py       # CLI -> horizon price snapshots (the analysis dataset)
+  calibration.py    # Q1: Brier, calibration curve, Murphy decomposition, ECE/MCE
 data/               # outputs (gitignored)
 ```
 
@@ -133,6 +134,17 @@ Each row gets `outcome`, `volume`, `liquidity`, and a `price_h{N}` column per ho
 (plus `price_last`). `price_h24` vs `outcome` is the calibration input; the sequence
 `price_h168 → … → price_h1` is the Q4 timing curve.
 
+Then score the crowd (Q1 — calibration):
+
+```bash
+python -m src.calibration --snapshots data/snapshots.parquet --prob-col price_h24 \
+    --bins 10 --group-by venue
+```
+
+Reports the Brier score, Brier skill score vs the base-rate baseline, ECE/MCE, the
+Murphy reliability/resolution/uncertainty decomposition, and an ASCII calibration
+curve (predicted vs observed per bin). `--group-by category` splits it by topic.
+
 Price history, per market, can also be fetched directly:
 
 ```python
@@ -151,7 +163,7 @@ k_path  = kalshi.fetch_price_history(s, "KXFEDDECISION", "KXFEDDECISION-26SEP-H2
 - [x] Shared schema + resolved-market loaders (both venues)
 - [x] Price-history loaders (both venues)
 - [x] Horizon price-snapshot builder (the analysis dataset) — both venues verified
-- [ ] Q1 calibration + Brier
+- [x] Q1 calibration + Brier (curve, Murphy decomposition, ECE/MCE, skill score)
 - [ ] Q2–Q4 bias / liquidity / timing
 - [ ] Q5 curated cross-venue matching
 - [ ] Q6 backtest with realistic fills
