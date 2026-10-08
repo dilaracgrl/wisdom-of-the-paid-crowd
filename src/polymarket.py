@@ -13,6 +13,7 @@ Notes verified against the live API (2026-10):
 from __future__ import annotations
 
 import json
+from datetime import timedelta as _timedelta
 
 from .http import RateLimitedSession
 from .schema import Market
@@ -46,25 +47,28 @@ def fetch_resolved_markets(
     session: RateLimitedSession,
     limit: int | None = None,
     page_size: int = 500,
+    order: str | None = "volumeNum",
 ):
     """Yield normalized Market rows for resolved binary Polymarket markets.
 
     `limit` caps the total number of *accepted* rows (None = all).
+    `order` sorts the feed (default "volumeNum" desc for convenience); pass
+    None for the natural API order, which is what a *representative* pull wants
+    so the sample isn't selected on volume.
     """
     offset = 0
     accepted = 0
     while True:
-        batch = session.get_json(
-            GAMMA,
-            params={
-                "closed": "true",
-                "archived": "false",
-                "limit": page_size,
-                "offset": offset,
-                "order": "volumeNum",
-                "ascending": "false",
-            },
-        )
+        params = {
+            "closed": "true",
+            "archived": "false",
+            "limit": page_size,
+            "offset": offset,
+        }
+        if order:
+            params["order"] = order
+            params["ascending"] = "false"
+        batch = session.get_json(GAMMA, params=params)
         if not batch:
             return
         for m in batch:
@@ -94,6 +98,91 @@ def fetch_resolved_markets(
             if limit and accepted >= limit:
                 return
         offset += page_size
+
+
+def _pull_window(session, lo, hi, min_volume, page_size, max_offset, depth):
+    """Collect resolved binary markets with endDate in [lo, hi).
+
+    Gamma caps `offset` at ~2000 and `limit` at 100 once a date filter is set,
+    so a window with more than ~2000 markets would be silently truncated. We
+    detect that (last page still full at max offset) and split the window.
+    """
+    params_base = {
+        "closed": "true",
+        "end_date_min": lo.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "end_date_max": hi.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "limit": page_size,
+    }
+    collected, seen, offset, hit_cap = [], set(), 0, False
+    while offset <= max_offset:
+        batch = session.get_json(GAMMA, params={**params_base, "offset": offset})
+        if not batch:
+            break
+        for m in batch:
+            if m["id"] in seen:
+                continue
+            seen.add(m["id"])
+            collected.append(m)
+        if len(batch) < page_size:
+            break
+        if offset == max_offset:
+            hit_cap = True
+        offset += page_size
+
+    if hit_cap and depth < 6 and (hi - lo) > _timedelta(hours=12):
+        mid = lo + (hi - lo) / 2
+        yield from _pull_window(session, lo, mid, min_volume, page_size, max_offset, depth + 1)
+        yield from _pull_window(session, mid, hi, min_volume, page_size, max_offset, depth + 1)
+        return
+
+    for m in collected:
+        outcome = _parse_binary_outcome(m)
+        if outcome is None:
+            continue
+        if float(m.get("volumeNum") or 0.0) < min_volume:
+            continue
+        try:
+            token_ids = json.loads(m.get("clobTokenIds") or "[]")
+        except json.JSONDecodeError:
+            token_ids = []
+        yield Market(
+            venue="polymarket",
+            market_id=str(m.get("conditionId") or m.get("id")),
+            question=m.get("question", ""),
+            category=m.get("category") or "uncategorized",
+            outcome=outcome,
+            open_time=m.get("startDate"),
+            close_time=m.get("closedTime") or m.get("endDate"),
+            volume=float(m.get("volumeNum") or 0.0),
+            liquidity=float(m.get("liquidityNum") or 0.0),
+            price_ref={"yes_token": token_ids[0] if token_ids else None, "slug": m.get("slug")},
+        )
+
+
+def fetch_resolved_markets_windowed(
+    session: RateLimitedSession,
+    start: str,
+    end: str,
+    window_days: int = 30,
+    min_volume: float = 0.0,
+    page_size: int = 100,
+    max_offset: int = 2000,
+):
+    """Yield resolved binary markets with endDate in [start, end), by date window.
+
+    This is the representative-pull path: it enumerates the whole population in
+    a date range (not selected on volume), working around Gamma's offset/limit
+    caps. `min_volume` applies an inclusion threshold (a market nobody traded
+    has no crowd forecast). Dates are ISO8601 (e.g. "2022-01-01T00:00:00Z").
+    """
+    from datetime import datetime
+
+    cur = datetime.fromisoformat(start.replace("Z", "+00:00"))
+    stop = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    while cur < stop:
+        w_end = min(cur + _timedelta(days=window_days), stop)
+        yield from _pull_window(session, cur, w_end, min_volume, page_size, max_offset, 0)
+        cur = w_end
 
 
 def fetch_price_history(

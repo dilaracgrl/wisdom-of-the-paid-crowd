@@ -59,6 +59,19 @@ set of matched events (elections, macro prints, major crypto levels).
 5. **Rate limits are not published.** The shared HTTP client self-throttles (default
    0.2s between calls) and backs off on 429/5xx. Tune `min_interval` for bulk pulls.
 
+### Population census (Polymarket, CLOB era, Oct 2026)
+
+Walking date windows (Gamma caps `offset` at ~2000 and `limit` at 100 once a date
+filter is set, so the loader splits any window that overflows):
+
+- **64,813** resolved binary markets, 2022–2026; essentially all have price history.
+- **Base rate 25.6% YES** — the population leans "No"; samples skewed to high-volume
+  or recent markets do not reflect this.
+- **Volume is heavily skewed**: median $6.9k, p90 $203k. A top-by-volume sample lives
+  in the far right tail and flatters the crowd's accuracy — use a representative draw.
+- **~97% of markets have no `category`** in Gamma. Topic-level analysis (Q4 by category)
+  must derive the topic from tags/keywords, not the `category` field.
+
 ### Recommended scope
 
 Post-2022, binary markets, filtered to substantive series on both venues, with the
@@ -116,8 +129,13 @@ columns carry what each venue's history loader needs.
 ```bash
 pip install -r requirements.txt
 
-# Pull a small sample from both venues (top markets by volume)
-python -m src.fetch_markets --venue both --limit 500 --out data/markets.parquet
+# Quick look: top markets by volume (convenient, but NOT representative)
+python -m src.fetch_markets --venue polymarket --limit 500 --out data/markets.parquet
+
+# Representative pull: whole 2022-2025 population, $100 volume floor,
+# random 1500-market sample (reproducible via --seed)
+python -m src.fetch_markets --venue polymarket --representative \
+    --min-volume 100 --sample-n 1500 --out data/rep_markets.parquet
 
 # Kalshi only, longer-lived markets, to CSV
 python -m src.fetch_markets --venue kalshi --min-duration-hours 24 --out data/kalshi.csv

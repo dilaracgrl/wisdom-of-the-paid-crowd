@@ -23,6 +23,15 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="max rows per venue")
     ap.add_argument("--min-duration-hours", type=float, default=12.0,
                     help="Kalshi: drop markets shorter than this (filters micro-markets)")
+    ap.add_argument("--representative", action="store_true",
+                    help="Polymarket: pull the whole date-range population (not volume-sorted)")
+    ap.add_argument("--start", default="2022-01-01T00:00:00Z", help="representative: window start")
+    ap.add_argument("--end", default="2025-10-01T00:00:00Z", help="representative: window end")
+    ap.add_argument("--min-volume", type=float, default=0.0,
+                    help="inclusion threshold: drop markets below this traded volume")
+    ap.add_argument("--sample-n", type=int, default=None,
+                    help="randomly subsample this many rows per venue after pulling")
+    ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out", default="data/markets.parquet")
     args = ap.parse_args()
 
@@ -30,10 +39,17 @@ def main() -> None:
     rows = []
 
     if args.venue in ("polymarket", "both"):
-        print("Fetching Polymarket resolved markets...")
-        for i, m in enumerate(polymarket.fetch_resolved_markets(session, limit=args.limit), 1):
+        if args.representative:
+            print(f"Fetching Polymarket population {args.start[:10]}..{args.end[:10]} "
+                  f"(min_volume={args.min_volume})...")
+            src = polymarket.fetch_resolved_markets_windowed(
+                session, args.start, args.end, min_volume=args.min_volume)
+        else:
+            print("Fetching Polymarket resolved markets (volume-sorted)...")
+            src = polymarket.fetch_resolved_markets(session, limit=args.limit)
+        for i, m in enumerate(src, 1):
             rows.append(m.to_dict())
-            if i % 500 == 0:
+            if i % 1000 == 0:
                 print(f"  polymarket: {i}")
         print(f"  polymarket total: {sum(r['venue'] == 'polymarket' for r in rows)}")
 
@@ -52,6 +68,14 @@ def main() -> None:
         print(f"  kalshi total: {len(rows) - n0}")
 
     df = pd.DataFrame(rows)
+
+    if args.sample_n and len(df) > args.sample_n:
+        # representative random subsample, per venue, reproducible via seed
+        df = (df.groupby("venue", group_keys=False)[df.columns.tolist()]
+                .apply(lambda g: g.sample(min(len(g), args.sample_n), random_state=args.seed))
+                .reset_index(drop=True))
+        print(f"randomly subsampled to {len(df)} rows (seed={args.seed})")
+
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     if args.out.endswith(".csv"):
         df.to_csv(args.out, index=False)
