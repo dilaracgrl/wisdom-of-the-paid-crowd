@@ -93,6 +93,21 @@ one dataset powers Q1–Q4 and Q6; Q5 runs off a hand-matched event list on top.
   **after** Polymarket gas + Kalshi fees.
 - **Backtest realism.** Don't assume fills at the quoted longshot price; thin books
   rarely allow it. Model spread, fees, and fill feasibility from the bid/ask data.
+- **Horizon coverage confound (Q4).** Fewer markets have a snapshot at long horizons
+  (e.g. only markets open ≥1 week before close have a `price_h168`). So a by-horizon
+  Brier table mixes different market subsets. For a clean timing curve, restrict to the
+  markets present at *every* horizon before comparing.
+
+## Preliminary findings (representative sample, n=1,500 Polymarket, Oct 2026)
+
+- **The crowd is well-calibrated but not as sharp as a naive sample suggests.** Brier
+  at 24h = 0.083 (skill score +0.52 vs base rate). A volume-sorted top-250 sample scored
+  0.043 / +0.75 — it overstated skill by ~45% because it lives in the easy right tail.
+- **Favourite–longshot bias is visible (Q2).** Longshots are overpriced (the 0.40–0.50
+  bucket wins only ~33%; 0.20–0.30 wins ~18%) and favourites underpriced (0.80–0.90 wins
+  ~95%). Reliability is tiny (0.002) — the bias is directional, not general miscalibration.
+
+*Numbers are preliminary (single 1,500-market draw, Polymarket only); not final results.*
 
 ## Layout
 
