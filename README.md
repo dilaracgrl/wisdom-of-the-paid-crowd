@@ -45,12 +45,18 @@ set of matched events (elections, macro prints, major crypto levels).
    early") is therefore scoped to post-2022 on Polymarket; Kalshi is unaffected.
 2. **Kalshi candlesticks cap at 5,000 points/request.** The loader chunks the time
    range. `period_interval` is in minutes and must be `1`, `60`, or `1440`.
-3. **Kalshi's settled feed is dominated by 15-minute crypto micro-markets**
+3. **Polymarket's `interval=all` silently returns `[]` at fine granularity.** When
+   span ÷ fidelity exceeds the server's point cap it empties rather than erroring
+   (verified: hourly over 10 months → 0 points; daily → 307). The fix is an explicit
+   `startTs`/`endTs` window, which honors fine fidelity (~20k points over 14 days at
+   1-min). The snapshot builder therefore fetches only the `[close − max_horizon, close]`
+   window on both venues — which also keeps every request cheap.
+4. **Kalshi's settled feed is dominated by 15-minute crypto micro-markets**
    (`KXBTC15M`, `KXMVECROSSCATEGORY`, …). Pulling "all settled" naively swamps every
    statistic, so the loader filters by a minimum market lifespan
    (`--min-duration-hours`, default 12). This is an explicit **selection decision** —
    document whatever threshold the final analysis uses.
-4. **Rate limits are not published.** The shared HTTP client self-throttles (default
+5. **Rate limits are not published.** The shared HTTP client self-throttles (default
    0.2s between calls) and backs off on 429/5xx. Tune `min_interval` for bulk pulls.
 
 ### Recommended scope
@@ -84,6 +90,7 @@ src/
   polymarket.py     # Gamma markets + CLOB price history
   kalshi.py         # settled markets + candlestick price history
   fetch_markets.py  # CLI -> one normalized markets table
+  snapshot.py       # CLI -> horizon price snapshots (the analysis dataset)
 data/               # outputs (gitignored)
 ```
 
@@ -115,7 +122,18 @@ python -m src.fetch_markets --venue both --limit 500 --out data/markets.parquet
 python -m src.fetch_markets --venue kalshi --min-duration-hours 24 --out data/kalshi.csv
 ```
 
-Price history, per market, is fetched on demand:
+Then build the analysis dataset — the YES price at fixed horizons before resolution:
+
+```bash
+# horizons default to 168,72,24,12,6,1 hours before close
+python -m src.snapshot --markets data/markets.parquet --out data/snapshots.parquet --fidelity-min 60
+```
+
+Each row gets `outcome`, `volume`, `liquidity`, and a `price_h{N}` column per horizon
+(plus `price_last`). `price_h24` vs `outcome` is the calibration input; the sequence
+`price_h168 → … → price_h1` is the Q4 timing curve.
+
+Price history, per market, can also be fetched directly:
 
 ```python
 from src.http import RateLimitedSession
@@ -132,7 +150,7 @@ k_path  = kalshi.fetch_price_history(s, "KXFEDDECISION", "KXFEDDECISION-26SEP-H2
 - [x] End-to-end feasibility verified against both live APIs
 - [x] Shared schema + resolved-market loaders (both venues)
 - [x] Price-history loaders (both venues)
-- [ ] Horizon price-snapshot builder (the analysis dataset)
+- [x] Horizon price-snapshot builder (the analysis dataset) — both venues verified
 - [ ] Q1 calibration + Brier
 - [ ] Q2–Q4 bias / liquidity / timing
 - [ ] Q5 curated cross-venue matching

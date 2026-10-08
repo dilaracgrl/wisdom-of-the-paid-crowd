@@ -96,15 +96,29 @@ def fetch_resolved_markets(
         offset += page_size
 
 
-def fetch_price_history(session: RateLimitedSession, yes_token: str, fidelity: int = 1440):
+def fetch_price_history(
+    session: RateLimitedSession,
+    yes_token: str,
+    fidelity: int = 1440,
+    start_ts: int | None = None,
+    end_ts: int | None = None,
+):
     """Return [(unix_ts, price), ...] for a market's YES token.
 
-    fidelity is in minutes (1440 = daily). Empty list for AMM-era markets.
+    fidelity is in minutes (1440 = daily, 60 = hourly). Empty list for
+    AMM-era (pre-2022) markets.
+
+    Pass start_ts + end_ts for a bounded window (unix seconds). This is the
+    reliable way to get fine fidelity: `interval=all` silently returns [] when
+    span / fidelity exceeds the server's point cap, whereas an explicit window
+    honors the request (tested: ~20k points over 14 days at 1-min fidelity).
     """
     if not yes_token:
         return []
-    data = session.get_json(
-        CLOB_HISTORY,
-        params={"market": yes_token, "interval": "all", "fidelity": fidelity},
-    )
+    params = {"market": yes_token, "fidelity": fidelity}
+    if start_ts is not None and end_ts is not None:
+        params["startTs"], params["endTs"] = start_ts, end_ts
+    else:
+        params["interval"] = "all"
+    data = session.get_json(CLOB_HISTORY, params=params)
     return [(pt["t"], pt["p"]) for pt in data.get("history", [])]
