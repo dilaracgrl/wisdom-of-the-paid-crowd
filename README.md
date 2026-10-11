@@ -103,9 +103,12 @@ one dataset powers Q1–Q4 and Q6; Q5 runs off a hand-matched event list on top.
 - **The crowd is well-calibrated but not as sharp as a naive sample suggests.** Brier
   at 24h = 0.083 (skill score +0.52 vs base rate). A volume-sorted top-250 sample scored
   0.043 / +0.75 — it overstated skill by ~45% because it lives in the easy right tail.
-- **Favourite–longshot bias is visible (Q2).** Longshots are overpriced (the 0.40–0.50
-  bucket wins only ~33%; 0.20–0.30 wins ~18%) and favourites underpriced (0.80–0.90 wins
-  ~95%). Reliability is tiny (0.002) — the bias is directional, not general miscalibration.
+- **Favourite–longshot bias confirmed (Q2).** The linear-probability fit is
+  `outcome = −0.028 + 1.031·price` (slope>1, intercept<0 — the classic signature).
+  Bias flips sign at 0.50: every sub-50% bucket is overpriced, every above-50% bucket
+  underpriced. Longshots (price<0.10) won 0.009 vs 0.018 priced — half as often; the
+  0.40–0.50 bucket (won 0.33 vs 0.45 priced) is individually significant. Betting NO on
+  overpriced sub-50% contracts shows a positive paper edge (previews Q6).
 
 *Numbers are preliminary (single 1,500-market draw, Polymarket only); not final results.*
 
@@ -120,6 +123,7 @@ src/
   fetch_markets.py  # CLI -> one normalized markets table
   snapshot.py       # CLI -> horizon price snapshots (the analysis dataset)
   calibration.py    # Q1: Brier, calibration curve, Murphy decomposition, ECE/MCE
+  longshot.py       # Q2: favourite-longshot bias, Wilson CIs, LPM signature
 data/               # outputs (gitignored)
 ```
 
@@ -178,6 +182,17 @@ Reports the Brier score, Brier skill score vs the base-rate baseline, ECE/MCE, t
 Murphy reliability/resolution/uncertainty decomposition, and an ASCII calibration
 curve (predicted vs observed per bin). `--group-by category` splits it by topic.
 
+Test for favourite-longshot bias (Q2):
+
+```bash
+python -m src.longshot --snapshots data/rep_snap.parquet --prob-col price_h24
+```
+
+Per price bucket (fine in the tails): realized win rate, Wilson 95% CI, bias
+(win − price), expected value of betting YES/NO, and a significance flag; plus the
+longshot/favourite tail summary and the linear-probability fit whose slope>1,
+intercept<0 is the classic bias signature.
+
 Price history, per market, can also be fetched directly:
 
 ```python
@@ -197,7 +212,8 @@ k_path  = kalshi.fetch_price_history(s, "KXFEDDECISION", "KXFEDDECISION-26SEP-H2
 - [x] Price-history loaders (both venues)
 - [x] Horizon price-snapshot builder (the analysis dataset) — both venues verified
 - [x] Q1 calibration + Brier (curve, Murphy decomposition, ECE/MCE, skill score)
-- [ ] Q2–Q4 bias / liquidity / timing
+- [x] Q2 favourite-longshot bias (bucket win rates, Wilson CIs, LPM signature)
+- [ ] Q3–Q4 liquidity / timing
 - [ ] Q5 curated cross-venue matching
 - [ ] Q6 backtest with realistic fills
 
