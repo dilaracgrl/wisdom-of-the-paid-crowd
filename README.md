@@ -115,6 +115,12 @@ one dataset powers Q1–Q4 and Q6; Q5 runs off a hand-matched event list on top.
   (ECE 0.104), because thin markets are mostly easy longshots. On contested markets
   (price 0.2–0.8), the <$1k bucket has **negative skill (−0.13)** — it fails to beat the
   base rate. Contested skill turns solidly positive around a **≈$10k** volume threshold.
+- **The market learns late, and timing is category-specific (Q4).** On a fixed cohort
+  (balanced panel, n=590), Brier falls 0.091 (1 week out) → 0.052 (24h) → 0.002 (final),
+  skill +0.44 → +0.99 — and **half the total accuracy gain arrives in the final ~12h**.
+  Politics and sports are "known early" (Brier ~0.06 a week out); crypto is near-random a
+  week out (Brier 0.144) but resolves to near-perfect — a coin's 7-day price is genuinely
+  unknowable early. (Panel = 590/1500, biased toward longer-lived markets.)
 
 *Numbers are preliminary (single 1,500-market draw, Polymarket only); not final results.*
 
@@ -131,6 +137,7 @@ src/
   calibration.py    # Q1: Brier, calibration curve, Murphy decomposition, ECE/MCE
   longshot.py       # Q2: favourite-longshot bias, Wilson CIs, LPM signature
   liquidity.py      # Q3: accuracy by volume, difficulty-controlled
+  timing.py         # Q4: accuracy vs time-to-resolution, balanced panel + category
 data/               # outputs (gitignored)
 ```
 
@@ -211,6 +218,17 @@ reports a **difficulty-controlled** view restricted to contested markets (price
 0.20–0.80) — necessary because thin markets skew to easy longshots and would
 otherwise post a flatteringly low raw Brier.
 
+Test how early the market knows (Q4):
+
+```bash
+python -m src.timing --snapshots data/rep_snap.parquet --by-category
+```
+
+Builds a **balanced panel** (markets with a price at *every* horizon, so the curve
+follows one fixed cohort rather than mixing coverage), reports Brier/skill/ECE from
+1 week out to settlement, and splits by **keyword-derived** category (Gamma's
+`category` field is ~97% empty, so topic is inferred from the question text).
+
 Price history, per market, can also be fetched directly:
 
 ```python
@@ -232,7 +250,7 @@ k_path  = kalshi.fetch_price_history(s, "KXFEDDECISION", "KXFEDDECISION-26SEP-H2
 - [x] Q1 calibration + Brier (curve, Murphy decomposition, ECE/MCE, skill score)
 - [x] Q2 favourite-longshot bias (bucket win rates, Wilson CIs, LPM signature)
 - [x] Q3 liquidity vs accuracy (difficulty-controlled, reliability threshold)
-- [ ] Q4 timing (how early does the market know)
+- [x] Q4 timing (balanced-panel curve + keyword-category breakdown)
 - [ ] Q5 curated cross-venue matching
 - [ ] Q6 backtest with realistic fills
 
