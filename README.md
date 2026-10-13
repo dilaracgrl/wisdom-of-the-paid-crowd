@@ -109,6 +109,12 @@ one dataset powers Q1–Q4 and Q6; Q5 runs off a hand-matched event list on top.
   underpriced. Longshots (price<0.10) won 0.009 vs 0.018 priced — half as often; the
   0.40–0.50 bucket (won 0.33 vs 0.45 priced) is individually significant. Betting NO on
   overpriced sub-50% contracts shows a positive paper edge (previews Q6).
+- **Thin markets forecast worse — once you control for difficulty (Q3).** Skill score
+  rises monotonically with volume (+0.13 → +0.66) and ECE halves. Raw Brier alone is
+  misleading: the thinnest bucket posts a *low* Brier (0.081) but the *worst* calibration
+  (ECE 0.104), because thin markets are mostly easy longshots. On contested markets
+  (price 0.2–0.8), the <$1k bucket has **negative skill (−0.13)** — it fails to beat the
+  base rate. Contested skill turns solidly positive around a **≈$10k** volume threshold.
 
 *Numbers are preliminary (single 1,500-market draw, Polymarket only); not final results.*
 
@@ -124,6 +130,7 @@ src/
   snapshot.py       # CLI -> horizon price snapshots (the analysis dataset)
   calibration.py    # Q1: Brier, calibration curve, Murphy decomposition, ECE/MCE
   longshot.py       # Q2: favourite-longshot bias, Wilson CIs, LPM signature
+  liquidity.py      # Q3: accuracy by volume, difficulty-controlled
 data/               # outputs (gitignored)
 ```
 
@@ -193,6 +200,17 @@ Per price bucket (fine in the tails): realized win rate, Wilson 95% CI, bias
 longshot/favourite tail summary and the linear-probability fit whose slope>1,
 intercept<0 is the classic bias signature.
 
+Test liquidity vs accuracy (Q3):
+
+```bash
+python -m src.liquidity --snapshots data/rep_snap.parquet --by volume
+```
+
+Scores each volume stratum with the Q1 engine (Brier, skill, ECE, resolution), and
+reports a **difficulty-controlled** view restricted to contested markets (price
+0.20–0.80) — necessary because thin markets skew to easy longshots and would
+otherwise post a flatteringly low raw Brier.
+
 Price history, per market, can also be fetched directly:
 
 ```python
@@ -213,7 +231,8 @@ k_path  = kalshi.fetch_price_history(s, "KXFEDDECISION", "KXFEDDECISION-26SEP-H2
 - [x] Horizon price-snapshot builder (the analysis dataset) — both venues verified
 - [x] Q1 calibration + Brier (curve, Murphy decomposition, ECE/MCE, skill score)
 - [x] Q2 favourite-longshot bias (bucket win rates, Wilson CIs, LPM signature)
-- [ ] Q3–Q4 liquidity / timing
+- [x] Q3 liquidity vs accuracy (difficulty-controlled, reliability threshold)
+- [ ] Q4 timing (how early does the market know)
 - [ ] Q5 curated cross-venue matching
 - [ ] Q6 backtest with realistic fills
 
