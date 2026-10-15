@@ -88,6 +88,12 @@ def fetch_resolved_markets(
             return
 
 
+def fetch_market(session: RateLimitedSession, ticker: str) -> dict:
+    """Fetch a single market's metadata (for open/close time bounds)."""
+    data = session.get_json(f"{BASE}/markets/{ticker}")
+    return data.get("market", data)
+
+
 def fetch_price_history(
     session: RateLimitedSession,
     series: str,

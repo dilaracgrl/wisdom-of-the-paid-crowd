@@ -121,6 +121,13 @@ one dataset powers Q1–Q4 and Q6; Q5 runs off a hand-matched event list on top.
   Politics and sports are "known early" (Brier ~0.06 a week out); crypto is near-random a
   week out (Brier 0.144) but resolves to near-perfect — a coin's 7-day price is genuinely
   unknowable early. (Panel = 590/1500, biased toward longer-lived markets.)
+- **Venues are highly correlated but not perfectly efficient (Q5).** For the Sept 2026
+  Fed "hike 25bps" market, Polymarket and Kalshi prices correlate +0.98, but diverged a
+  mean 2.5¢ (max 10¢); a locked position after Kalshi fees was available on 53% of days,
+  the best at ~38% annualized. **Heavily caveated:** a single matched pair on *daily close*
+  prices (not intraday bid/ask), modeling only Kalshi fees — so 53%/38% are optimistic
+  upper bounds that ignore spread, slippage, and simultaneous-fill risk. Kalshi's public
+  API prunes old settled markets, which limits how many pairs can be matched.
 
 *Numbers are preliminary (single 1,500-market draw, Polymarket only); not final results.*
 
@@ -138,6 +145,7 @@ src/
   longshot.py       # Q2: favourite-longshot bias, Wilson CIs, LPM signature
   liquidity.py      # Q3: accuracy by volume, difficulty-controlled
   timing.py         # Q4: accuracy vs time-to-resolution, balanced panel + category
+  arbitrage.py      # Q5: cross-venue price divergence + locked-arb test
 data/               # outputs (gitignored)
 ```
 
@@ -229,6 +237,20 @@ follows one fixed cohort rather than mixing coverage), reports Brier/skill/ECE f
 1 week out to settlement, and splits by **keyword-derived** category (Gamma's
 `category` field is ~97% empty, so topic is inferred from the question text).
 
+Test cross-venue arbitrage (Q5):
+
+```bash
+python -m src.arbitrage          # run the curated matched-event registry
+python -m src.arbitrage --list   # list the matches
+```
+
+Aligns a matched event's Polymarket and Kalshi price paths on a common clock and
+tests whether a *locked* position (YES on one venue, NO on the other — guaranteed
+$1 at resolution) was available below $1 after fees. Matches are hand-curated in
+`REGISTRY` (no shared event ID exists across venues). Kalshi's general fee
+(`ceil(0.07·p·(1−p))`) is modeled; the annualized return accounts for capital
+locked until resolution.
+
 Price history, per market, can also be fetched directly:
 
 ```python
@@ -251,6 +273,7 @@ k_path  = kalshi.fetch_price_history(s, "KXFEDDECISION", "KXFEDDECISION-26SEP-H2
 - [x] Q2 favourite-longshot bias (bucket win rates, Wilson CIs, LPM signature)
 - [x] Q3 liquidity vs accuracy (difficulty-controlled, reliability threshold)
 - [x] Q4 timing (balanced-panel curve + keyword-category breakdown)
+- [x] Q5 cross-venue arbitrage (matched-event engine; demonstrated on Fed pair)
 - [ ] Q5 curated cross-venue matching
 - [ ] Q6 backtest with realistic fills
 
