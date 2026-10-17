@@ -128,6 +128,13 @@ one dataset powers Q1–Q4 and Q6; Q5 runs off a hand-matched event list on top.
   prices (not intraday bid/ask), modeling only Kalshi fees — so 53%/38% are optimistic
   upper bounds that ignore spread, slippage, and simultaneous-fill risk. Kalshi's public
   API prunes old settled markets, which limits how many pairs can be matched.
+- **The bias is real but barely monetizable after costs (Q6).** Fading sub-50% longshots
+  (bet NO) returned +1.9% ROI per bet at a 1¢ spread; backing favourites (bet YES ≥0.70)
+  +4.1%. But the edge is thin: fading sub-50% goes +3.0% → +1.9% → +0.7% → −0.4% as the
+  spread rises 0→1→2→3¢, and fading *extreme* longshots (≤0.05) already loses — the tiny
+  tail edge is eaten by spread. The opposite rule (buying longshots) loses −27% (t=−4.0),
+  confirming the bias is directional and real. Conclusion: a genuine behavioural bias in a
+  market close enough to efficient that transaction costs leave only a marginal edge.
 
 *Numbers are preliminary (single 1,500-market draw, Polymarket only); not final results.*
 
@@ -146,6 +153,7 @@ src/
   liquidity.py      # Q3: accuracy by volume, difficulty-controlled
   timing.py         # Q4: accuracy vs time-to-resolution, balanced panel + category
   arbitrage.py      # Q5: cross-venue price divergence + locked-arb test
+  backtest.py       # Q6: favourite-longshot strategy backtest after costs
 data/               # outputs (gitignored)
 ```
 
@@ -251,6 +259,18 @@ $1 at resolution) was available below $1 after fees. Matches are hand-curated in
 (`ceil(0.07·p·(1−p))`) is modeled; the annualized return accounts for capital
 locked until resolution.
 
+Backtest the bias as a trading rule (Q6):
+
+```bash
+python -m src.backtest --snapshots data/rep_snap.parquet --spread 0.01 --min-volume 1000
+```
+
+Enters at the horizon snapshot (no look-ahead) and holds to settlement. Sweeps the
+fade-longshot (bet NO) and back-favourite (bet YES) thresholds, shows spread
+sensitivity, and reports ROI, hit rate, and a t-stat per rule. A liquidity floor
+(`--min-volume`) approximates fill feasibility; the opposite rule is run as a
+sanity check (it should lose if the bias is real).
+
 Price history, per market, can also be fetched directly:
 
 ```python
@@ -274,6 +294,7 @@ k_path  = kalshi.fetch_price_history(s, "KXFEDDECISION", "KXFEDDECISION-26SEP-H2
 - [x] Q3 liquidity vs accuracy (difficulty-controlled, reliability threshold)
 - [x] Q4 timing (balanced-panel curve + keyword-category breakdown)
 - [x] Q5 cross-venue arbitrage (matched-event engine; demonstrated on Fed pair)
+- [x] Q6 backtest (favourite-longshot rule, spread sensitivity, t-stats)
 - [ ] Q5 curated cross-venue matching
 - [ ] Q6 backtest with realistic fills
 
